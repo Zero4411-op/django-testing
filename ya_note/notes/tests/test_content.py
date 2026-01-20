@@ -1,62 +1,41 @@
 """Тесты контента, списки заметок и формы на страницах."""
 
-from django.urls import reverse
-from django.test import Client, TestCase
-
 from notes.forms import NoteForm
-from notes.models import Note
+from notes.tests.common import (
+    BaseNoteTestCase,
+    NOTE_SLUG,
+    NOTE_TEXT,
+    NOTE_TITLE,
+    NOTES_ADD_URL,
+    NOTES_EDIT_URL,
+    NOTES_LIST_URL,
+)
 
 
-class TestContent(TestCase):
+class TestContent(BaseNoteTestCase):
     """Проверяет, что страницы отдают ожидаемые данные в контексте."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Создаёт пользователей и одну заметку автора."""
-        from django.contrib.auth import get_user_model
-
-        user_model = get_user_model()
-        cls.author = user_model.objects.create(username="author")
-        cls.reader = user_model.objects.create(username="reader")
-        cls.note = Note.objects.create(
-            title="Заголовок",
-            text="Текст",
-            slug="note-slug",
-            author=cls.author,
-        )
-
-    def setUp(self):
-        """Создаём два клиента, для автора и для другого пользователя."""
-        self.author_client = Client()
-        self.author_client.force_login(self.author)
-
-        self.reader_client = Client()
-        self.reader_client.force_login(self.reader)
 
     def test_note_visible_in_list_for_author(self):
         """Автор видит свою заметку в списке."""
-        url = reverse("notes:list")
-        response = self.author_client.get(url)
-        object_list = response.context["object_list"]
-        self.assertIn(self.note, object_list)
+        response = self.author_client.get(NOTES_LIST_URL)
+        notes = response.context["object_list"]
+
+        note = notes.get(slug=NOTE_SLUG)
+        assert note.title == NOTE_TITLE
+        assert note.text == NOTE_TEXT
+        assert note.slug == NOTE_SLUG
+        assert note.author_id == self.author.id
 
     def test_note_hidden_in_list_for_other_user(self):
         """Чужие заметки не попадают в список другого пользователя."""
-        url = reverse("notes:list")
-        response = self.reader_client.get(url)
-        object_list = response.context["object_list"]
-        self.assertNotIn(self.note, object_list)
+        response = self.reader_client.get(NOTES_LIST_URL)
+        notes = response.context["object_list"]
 
-    def test_create_page_has_form(self):
-        """На странице создания заметки есть форма."""
-        url = reverse("notes:add")
-        response = self.author_client.get(url)
-        self.assertIn("form", response.context)
-        self.assertIsInstance(response.context["form"], NoteForm)
+        assert not notes.filter(slug=NOTE_SLUG).exists()
 
-    def test_edit_page_has_form(self):
-        """На странице редактирования заметки есть форма."""
-        url = reverse("notes:edit", args=(self.note.slug,))
-        response = self.author_client.get(url)
-        self.assertIn("form", response.context)
-        self.assertIsInstance(response.context["form"], NoteForm)
+    def test_pages_have_form(self):
+        """На страницах создания и редактирования заметки есть форма."""
+        for url in (NOTES_ADD_URL, NOTES_EDIT_URL):
+            with self.subTest(url=url):
+                form = self.author_client.get(url).context.get("form")
+                assert isinstance(form, NoteForm)

@@ -2,91 +2,71 @@
 
 from datetime import timedelta
 
+import pytest
 from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.test import TestCase
-from django.urls import reverse
 from django.utils import timezone
 
 from news.forms import CommentForm
-from news.models import Comment, News
-
-User = get_user_model()
+from news.models import News
 
 
-class TestHomePage(TestCase):
-    """Сколько новостей показываем и в каком порядке."""
+pytestmark = pytest.mark.django_db
 
-    HOME_URL = reverse("news:home")
 
-    @classmethod
-    def setUpTestData(cls):
-        """Заранее создаём пачку новостей, чтобы было что сортировать."""
-        now = timezone.now()
-        all_news = [
+def test_news_count(client, home_url):
+    """На главной не должно быть больше лимита новостей."""
+    now = timezone.now()
+    News.objects.bulk_create(
+        [
             News(
-                title=f"Новость {index}",
+                title=f"Новость {i}",
                 text="Просто текст.",
-                date=now - timedelta(days=index),
+                date=now - timedelta(days=i),
             )
-            for index in range(settings.NEWS_COUNT_ON_HOME_PAGE + 1)
+            for i in range(settings.NEWS_COUNT_ON_HOME_PAGE + 1)
         ]
-        News.objects.bulk_create(all_news)
+    )
 
-    def test_news_count(self):
-        """На главной не должно быть больше лимита новостей."""
-        response = self.client.get(self.HOME_URL)
-        object_list = response.context["object_list"]
-        self.assertEqual(object_list.count(), settings.NEWS_COUNT_ON_HOME_PAGE)
-
-    def test_news_order(self):
-        """Самые свежие новости должны идти первыми."""
-        response = self.client.get(self.HOME_URL)
-        object_list = response.context["object_list"]
-        dates = [news.date for news in object_list]
-        self.assertEqual(dates, sorted(dates, reverse=True))
+    news_items = list(client.get(home_url).context["object_list"])
+    assert len(news_items) == settings.NEWS_COUNT_ON_HOME_PAGE
 
 
-class TestDetailPage(TestCase):
-    """Порядок комментариев и видимость формы."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Создаём новость так, чтобы легко проверить сортировку."""
-        cls.news = News.objects.create(
-            title="Тестовая новость", text="Просто текст."
-        )
-        cls.detail_url = reverse("news:detail", args=(cls.news.id,))
-        cls.author = User.objects.create(username="Комментатор")
-
-        now = timezone.now()
-        for index in range(10):
-            comment = Comment.objects.create(
-                news=cls.news,
-                author=cls.author,
-                text=f"Текст {index}",
+def test_news_order(client, home_url):
+    """Самые свежие новости должны идти первыми."""
+    now = timezone.now()
+    News.objects.bulk_create(
+        [
+            News(
+                title=f"Новость {i}",
+                text="Просто текст.",
+                date=now - timedelta(days=i),
             )
-            comment.created = now + timedelta(days=index)
-            comment.save()
+            for i in range(settings.NEWS_COUNT_ON_HOME_PAGE + 1)
+        ]
+    )
 
-    def test_comments_order(self):
-        """Комментарии на странице должны идти от старых к новым."""
-        response = self.client.get(self.detail_url)
-        self.assertIn("news", response.context)
+    news_items = list(client.get(home_url).context["object_list"])
+    dates = [item.date for item in news_items]
+    assert dates == sorted(dates, reverse=True)
 
-        news = response.context["news"]
-        comments = news.comment_set.all()
-        created_list = [comment.created for comment in comments]
-        self.assertEqual(created_list, sorted(created_list))
 
-    def test_anonymous_client_has_no_form(self):
-        """Анониму форму комментирования не показываем."""
-        response = self.client.get(self.detail_url)
-        self.assertNotIn("form", response.context)
+def test_comments_order(client, detail_url, ordered_comments):
+    """Комментарии на странице должны идти от старых к новым."""
+    response = client.get(detail_url)
+    news = response.context["news"]
 
-    def test_authorized_client_has_form(self):
-        """Залогиненному пользователю форму показываем."""
-        self.client.force_login(self.author)
-        response = self.client.get(self.detail_url)
-        self.assertIn("form", response.context)
-        self.assertIsInstance(response.context["form"], CommentForm)
+    comments = list(news.comment_set.all())
+    created = [c.created for c in comments]
+    assert created == sorted(created)
+
+
+def test_anonymous_client_has_no_form(client, detail_url):
+    """Анониму форму комментирования не показываем."""
+    response = client.get(detail_url)
+    assert "form" not in response.context
+
+
+def test_authorized_client_has_form(author_client, detail_url):
+    """Залогиненному пользователю форму показываем."""
+    form = author_client.get(detail_url).context.get("form")
+    assert isinstance(form, CommentForm)
