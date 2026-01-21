@@ -70,10 +70,11 @@ class TestNoteLogic(BaseNoteTestCase):
     def test_not_unique_slug(self):
         """Нельзя создать две заметки с одинаковым slug."""
         before = notes_state()
-        data = self.form_data.copy()
-        data["slug"] = self.note.slug
 
-        response = self.author_client.post(NOTES_ADD_URL, data=data)
+        response = self.author_client.post(
+            NOTES_ADD_URL,
+            data={**self.form_data, "slug": self.note.slug},
+        )
 
         form = response.context.get("form")
         self.assertFormError(form, "slug", self.note.slug + WARNING)
@@ -82,10 +83,14 @@ class TestNoteLogic(BaseNoteTestCase):
     def test_empty_slug_generates_from_title(self):
         """Если slug пустой, он формируется автоматически из title."""
         before_ids = notes_ids()
-        data = self.form_data.copy()
-        data.pop("slug")
 
-        response = self.author_client.post(NOTES_ADD_URL, data=data)
+        response = self.author_client.post(
+            NOTES_ADD_URL,
+            data={
+                "title": self.form_data["title"],
+                "text": self.form_data["text"],
+            },
+        )
         self.assertRedirects(
             response,
             NOTES_SUCCESS_URL,
@@ -96,9 +101,9 @@ class TestNoteLogic(BaseNoteTestCase):
         self.assertEqual(len(new_ids), 1)
         created = Note.objects.get(pk=new_ids.pop())
 
-        self.assertEqual(created.title, data["title"])
-        self.assertEqual(created.text, data["text"])
-        self.assertEqual(created.slug, slugify(data["title"]))
+        self.assertEqual(created.title, self.form_data["title"])
+        self.assertEqual(created.text, self.form_data["text"])
+        self.assertEqual(created.slug, slugify(self.form_data["title"]))
         self.assertEqual(created.author, self.author)
 
     def test_author_can_edit_note(self):
