@@ -10,14 +10,15 @@ pytestmark = pytest.mark.django_db
 
 def test_news_count(client, home_url, news_list):
     """На главной не должно быть больше лимита новостей."""
-    news_items = client.get(home_url).context["object_list"]
-    assert len(news_items) == settings.NEWS_COUNT_ON_HOME_PAGE
+    assert (
+        len(client.get(home_url).context["object_list"])
+        == settings.NEWS_COUNT_ON_HOME_PAGE
+    )
 
 
 def test_news_order(client, home_url, news_list):
     """Самые свежие новости должны идти первыми."""
-    news_items = client.get(home_url).context["object_list"]
-    dates = [item.date for item in news_items]
+    dates = [item.date for item in client.get(home_url).context["object_list"]]
     assert dates == sorted(dates, reverse=True)
 
 

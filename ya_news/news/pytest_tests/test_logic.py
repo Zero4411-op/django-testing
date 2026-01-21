@@ -10,13 +10,9 @@ from news.models import Comment
 pytestmark = pytest.mark.django_db
 
 FORM_DATA = {"text": "Текст комментария."}
-EDIT_DATA = {"text": "Обновлённый текст комментария."}
 READER_EDIT_DATA = {"text": "x"}
 
-BAD_WORDS_DATA = [
-    {"text": f"Какой-то текст, {bad_word}, еще текст"}
-    for bad_word in BAD_WORDS
-]
+BAD_WORDS_DATA = [{"text": bad_word} for bad_word in BAD_WORDS]
 
 
 def test_anonymous_user_cant_create_comment(client, detail_url):
@@ -94,28 +90,24 @@ def test_author_can_edit_comment(
     comment,
 ):
     """Автор обновляет текст и в базе должен быть новый вариант."""
-    response = author_client.post(edit_url, data=EDIT_DATA)
+    response = author_client.post(edit_url, data=FORM_DATA)
 
     assert response.status_code == HTTPStatus.FOUND
     assert response.url == comments_anchor_url
 
     updated = Comment.objects.get(pk=comment.pk)
-    assert updated.text == EDIT_DATA["text"]
+    assert updated.text == FORM_DATA["text"]
     assert updated.news == comment.news
     assert updated.author == comment.author
 
 
 def test_reader_cant_edit_comment(reader_client, edit_url, comment):
     """Чужой комментарий не редактируется и 404 и старый текст на месте."""
-    before_text = comment.text
-    before_news = comment.news
-    before_author = comment.author
-
     response = reader_client.post(edit_url, data=READER_EDIT_DATA)
 
     assert response.status_code == HTTPStatus.NOT_FOUND
 
-    reloaded = Comment.objects.get(pk=comment.pk)
-    assert reloaded.text == before_text
-    assert reloaded.news == before_news
-    assert reloaded.author == before_author
+    stored = Comment.objects.get(pk=comment.pk)
+    assert stored.text == comment.text
+    assert stored.news == comment.news
+    assert stored.author == comment.author

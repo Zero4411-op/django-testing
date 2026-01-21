@@ -4,8 +4,8 @@ from http import HTTPStatus
 
 from notes.tests.common import (
     BaseNoteTestCase,
-    LOGOUT_URL,
     LOGIN_URL,
+    LOGOUT_URL,
     NOTES_ADD_LOGIN_REDIRECT_URL,
     NOTES_ADD_URL,
     NOTES_DELETE_LOGIN_REDIRECT_URL,
@@ -32,6 +32,7 @@ class TestRoutes(BaseNoteTestCase):
         found = HTTPStatus.FOUND
         not_found = HTTPStatus.NOT_FOUND
         see_other = HTTPStatus.SEE_OTHER
+        logout_statuses = (ok, found, see_other)
 
         cases = [
             (self.client.get, NOTES_HOME_URL, ok),
@@ -52,16 +53,17 @@ class TestRoutes(BaseNoteTestCase):
             (self.client.get, NOTES_DETAIL_URL, found),
             (self.client.get, NOTES_EDIT_URL, found),
             (self.client.get, NOTES_DELETE_URL, found),
-            (self.client.post, LOGOUT_URL, (ok, found, see_other)),
+            (self.client.post, LOGOUT_URL, logout_statuses),
         ]
 
         for method, url, expected in cases:
             with self.subTest(url=url):
-                status_code = method(url).status_code
-                if isinstance(expected, tuple):
-                    self.assertIn(status_code, expected)
-                else:
-                    self.assertEqual(status_code, expected)
+                expected_statuses = (
+                    expected
+                    if isinstance(expected, tuple)
+                    else (expected,)
+                )
+                self.assertTrue(method(url).status_code in expected_statuses)
 
     def test_redirects_for_anonymous(self):
         """Анонимного пользователя отправляет на вход с закрытых страниц."""

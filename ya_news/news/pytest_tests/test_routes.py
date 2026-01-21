@@ -34,6 +34,8 @@ DELETE_REDIRECT_URL = pytest.lazy_fixture("delete_redirect_url")
         (AUTHOR_CLIENT, DELETE_URL, HTTPStatus.OK),
         (READER_CLIENT, EDIT_URL, HTTPStatus.NOT_FOUND),
         (READER_CLIENT, DELETE_URL, HTTPStatus.NOT_FOUND),
+        (ANON_CLIENT, EDIT_URL, HTTPStatus.FOUND),
+        (ANON_CLIENT, DELETE_URL, HTTPStatus.FOUND),
     ),
 )
 def test_status_codes(client_obj, url, expected_status):
