@@ -4,16 +4,20 @@ from http import HTTPStatus
 
 from notes.tests.common import (
     BaseNoteTestCase,
-    LOGIN_REDIRECTS,
-    LOGIN_URL,
-    LOGOUT_ALLOWED_STATUSES,
     LOGOUT_URL,
+    LOGIN_URL,
+    NOTES_ADD_LOGIN_REDIRECT_URL,
     NOTES_ADD_URL,
+    NOTES_DELETE_LOGIN_REDIRECT_URL,
     NOTES_DELETE_URL,
+    NOTES_DETAIL_LOGIN_REDIRECT_URL,
     NOTES_DETAIL_URL,
+    NOTES_EDIT_LOGIN_REDIRECT_URL,
     NOTES_EDIT_URL,
     NOTES_HOME_URL,
+    NOTES_LIST_LOGIN_REDIRECT_URL,
     NOTES_LIST_URL,
+    NOTES_SUCCESS_LOGIN_REDIRECT_URL,
     NOTES_SUCCESS_URL,
     SIGNUP_URL,
 )
@@ -24,37 +28,52 @@ class TestRoutes(BaseNoteTestCase):
 
     def test_status_codes(self):
         """Проверяем коды ответов для разных пользователей и страниц."""
+        ok = HTTPStatus.OK
+        found = HTTPStatus.FOUND
+        not_found = HTTPStatus.NOT_FOUND
+        see_other = HTTPStatus.SEE_OTHER
+
         cases = [
-            (NOTES_HOME_URL, self.client, HTTPStatus.OK),
-            (LOGIN_URL, self.client, HTTPStatus.OK),
-            (SIGNUP_URL, self.client, HTTPStatus.OK),
-            (NOTES_LIST_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_ADD_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_SUCCESS_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_DETAIL_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_EDIT_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_DELETE_URL, self.author_client, HTTPStatus.OK),
-            (NOTES_DETAIL_URL, self.reader_client, HTTPStatus.NOT_FOUND),
-            (NOTES_EDIT_URL, self.reader_client, HTTPStatus.NOT_FOUND),
-            (NOTES_DELETE_URL, self.reader_client, HTTPStatus.NOT_FOUND),
-            (NOTES_LIST_URL, self.client, HTTPStatus.FOUND),
-            (NOTES_ADD_URL, self.client, HTTPStatus.FOUND),
-            (NOTES_SUCCESS_URL, self.client, HTTPStatus.FOUND),
-            (NOTES_DETAIL_URL, self.client, HTTPStatus.FOUND),
-            (NOTES_EDIT_URL, self.client, HTTPStatus.FOUND),
-            (NOTES_DELETE_URL, self.client, HTTPStatus.FOUND),
+            (self.client.get, NOTES_HOME_URL, ok),
+            (self.client.get, LOGIN_URL, ok),
+            (self.client.get, SIGNUP_URL, ok),
+            (self.author_client.get, NOTES_LIST_URL, ok),
+            (self.author_client.get, NOTES_ADD_URL, ok),
+            (self.author_client.get, NOTES_SUCCESS_URL, ok),
+            (self.author_client.get, NOTES_DETAIL_URL, ok),
+            (self.author_client.get, NOTES_EDIT_URL, ok),
+            (self.author_client.get, NOTES_DELETE_URL, ok),
+            (self.reader_client.get, NOTES_DETAIL_URL, not_found),
+            (self.reader_client.get, NOTES_EDIT_URL, not_found),
+            (self.reader_client.get, NOTES_DELETE_URL, not_found),
+            (self.client.get, NOTES_LIST_URL, found),
+            (self.client.get, NOTES_ADD_URL, found),
+            (self.client.get, NOTES_SUCCESS_URL, found),
+            (self.client.get, NOTES_DETAIL_URL, found),
+            (self.client.get, NOTES_EDIT_URL, found),
+            (self.client.get, NOTES_DELETE_URL, found),
+            (self.client.post, LOGOUT_URL, (ok, found, see_other)),
         ]
 
-        for url, client, status in cases:
-            with self.subTest(url=url, status=status):
-                assert client.get(url).status_code == status
-
-        assert (
-            self.client.post(LOGOUT_URL).status_code in LOGOUT_ALLOWED_STATUSES
-        )
+        for method, url, expected in cases:
+            with self.subTest(url=url):
+                status_code = method(url).status_code
+                if isinstance(expected, tuple):
+                    self.assertIn(status_code, expected)
+                else:
+                    self.assertEqual(status_code, expected)
 
     def test_redirects_for_anonymous(self):
         """Анонимного пользователя отправляет на вход с закрытых страниц."""
-        for url, expected in LOGIN_REDIRECTS:
+        cases = [
+            (NOTES_LIST_URL, NOTES_LIST_LOGIN_REDIRECT_URL),
+            (NOTES_ADD_URL, NOTES_ADD_LOGIN_REDIRECT_URL),
+            (NOTES_SUCCESS_URL, NOTES_SUCCESS_LOGIN_REDIRECT_URL),
+            (NOTES_DETAIL_URL, NOTES_DETAIL_LOGIN_REDIRECT_URL),
+            (NOTES_EDIT_URL, NOTES_EDIT_LOGIN_REDIRECT_URL),
+            (NOTES_DELETE_URL, NOTES_DELETE_LOGIN_REDIRECT_URL),
+        ]
+
+        for url, expected in cases:
             with self.subTest(url=url):
                 self.assertRedirects(self.client.get(url), expected)

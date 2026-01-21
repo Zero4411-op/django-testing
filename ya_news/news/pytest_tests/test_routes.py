@@ -1,52 +1,53 @@
 """Проверяем доступ к страницам, что открыто всем, а что только автору."""
 
+from http import HTTPStatus
+
 import pytest
 from pytest_django.asserts import assertRedirects
 
-
 pytestmark = pytest.mark.django_db
 
+ANON_CLIENT = pytest.lazy_fixture("client")
+AUTHOR_CLIENT = pytest.lazy_fixture("author_client")
+READER_CLIENT = pytest.lazy_fixture("reader_client")
+
+HOME_URL = pytest.lazy_fixture("home_url")
+DETAIL_URL = pytest.lazy_fixture("detail_url")
+LOGIN_URL = pytest.lazy_fixture("login_url")
+SIGNUP_URL = pytest.lazy_fixture("signup_url")
+
+EDIT_URL = pytest.lazy_fixture("edit_url")
+DELETE_URL = pytest.lazy_fixture("delete_url")
+
+EDIT_REDIRECT_URL = pytest.lazy_fixture("edit_redirect_url")
+DELETE_REDIRECT_URL = pytest.lazy_fixture("delete_redirect_url")
+
 
 @pytest.mark.parametrize(
-    "url_fixture",
+    "client_obj, url, expected_status",
     (
-        "home_url",
-        "detail_url",
-        "login_url",
-        "signup_url",
+        (ANON_CLIENT, HOME_URL, HTTPStatus.OK),
+        (ANON_CLIENT, DETAIL_URL, HTTPStatus.OK),
+        (ANON_CLIENT, LOGIN_URL, HTTPStatus.OK),
+        (ANON_CLIENT, SIGNUP_URL, HTTPStatus.OK),
+        (AUTHOR_CLIENT, EDIT_URL, HTTPStatus.OK),
+        (AUTHOR_CLIENT, DELETE_URL, HTTPStatus.OK),
+        (READER_CLIENT, EDIT_URL, HTTPStatus.NOT_FOUND),
+        (READER_CLIENT, DELETE_URL, HTTPStatus.NOT_FOUND),
     ),
 )
-def test_public_pages_available_for_anonymous(request, client, url_fixture):
-    """Страницы без ограничений должны открываться у анонимного клиента."""
-    url = request.getfixturevalue(url_fixture)
-    assert client.get(url).status_code == 200
+def test_status_codes(client_obj, url, expected_status):
+    """Все проверки status_code — в одном тесте."""
+    assert client_obj.get(url).status_code == expected_status
 
 
 @pytest.mark.parametrize(
-    "client_fixture, expected_status",
-    (("author_client", 200), ("reader_client", 404)),
+    "url, expected",
+    (
+        (EDIT_URL, EDIT_REDIRECT_URL),
+        (DELETE_URL, DELETE_REDIRECT_URL),
+    ),
 )
-@pytest.mark.parametrize("url_fixture", ("edit_url", "delete_url"))
-def test_availability_for_comment_edit_and_delete(
-    request,
-    client_fixture,
-    expected_status,
-    url_fixture,
-):
-    """Редактирование и удаление доступны только автору комментария."""
-    client = request.getfixturevalue(client_fixture)
-    url = request.getfixturevalue(url_fixture)
-    assert client.get(url).status_code == expected_status
-
-
-@pytest.mark.parametrize("url_fixture", ("edit_url", "delete_url"))
-def test_redirect_for_anonymous_client(
-    request,
-    client,
-    login_url,
-    url_fixture,
-):
+def test_redirect_for_anonymous_client(client, url, expected):
     """Гостя со всех закрытых страниц отправляет на страницу входа."""
-    url = request.getfixturevalue(url_fixture)
-    expected = f"{login_url}?next={url}"
     assertRedirects(client.get(url), expected)
