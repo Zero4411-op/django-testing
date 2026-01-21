@@ -10,7 +10,6 @@ from news.models import Comment
 pytestmark = pytest.mark.django_db
 
 FORM_DATA = {"text": "Текст комментария."}
-READER_EDIT_DATA = {"text": "x"}
 
 BAD_WORDS_DATA = [{"text": bad_word} for bad_word in BAD_WORDS]
 
@@ -103,7 +102,7 @@ def test_author_can_edit_comment(
 
 def test_reader_cant_edit_comment(reader_client, edit_url, comment):
     """Чужой комментарий не редактируется и 404 и старый текст на месте."""
-    response = reader_client.post(edit_url, data=READER_EDIT_DATA)
+    response = reader_client.post(edit_url, data=FORM_DATA)
 
     assert response.status_code == HTTPStatus.NOT_FOUND
 

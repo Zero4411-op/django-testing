@@ -28,12 +28,16 @@ def notes_state():
     )
 
 
+def notes_ids():
+    return set(Note.objects.values_list("pk", flat=True))
+
+
 class TestNoteLogic(BaseNoteTestCase):
     """Проверки создания, slug-правил, редактирования и удаления заметок."""
 
     def test_user_can_create_note(self):
         """Авторизованный пользователь может создать заметку."""
-        before = notes_state()
+        before_ids = notes_ids()
 
         response = self.author_client.post(NOTES_ADD_URL, data=self.form_data)
         self.assertRedirects(
@@ -42,16 +46,14 @@ class TestNoteLogic(BaseNoteTestCase):
             fetch_redirect_response=False,
         )
 
-        notes = Note.objects.exclude(pk=self.note.pk)
-        self.assertEqual(notes.count(), 1)
-        created = notes.get()
+        new_ids = notes_ids() - before_ids
+        self.assertEqual(len(new_ids), 1)
+        created = Note.objects.get(pk=new_ids.pop())
 
         self.assertEqual(created.title, self.form_data["title"])
         self.assertEqual(created.text, self.form_data["text"])
         self.assertEqual(created.slug, self.form_data["slug"])
         self.assertEqual(created.author, self.author)
-
-        self.assertNotEqual(notes_state(), before)
 
     def test_anonymous_user_cant_create_note(self):
         """Анонимного пользователя при POST отправляет на логин."""
@@ -68,48 +70,52 @@ class TestNoteLogic(BaseNoteTestCase):
     def test_not_unique_slug(self):
         """Нельзя создать две заметки с одинаковым slug."""
         before = notes_state()
+        original_slug = self.form_data["slug"]
 
-        data = self.form_data.copy()
-        data["slug"] = self.note.slug
-        response = self.author_client.post(NOTES_ADD_URL, data=data)
+        self.form_data["slug"] = self.note.slug
+        response = self.author_client.post(NOTES_ADD_URL, data=self.form_data)
 
         form = response.context.get("form")
         self.assertFormError(form, "slug", self.note.slug + WARNING)
         self.assertEqual(notes_state(), before)
 
+        self.form_data["slug"] = original_slug
+
     def test_empty_slug_generates_from_title(self):
         """Если slug пустой, он формируется автоматически из title."""
-        before = notes_state()
+        before_ids = notes_ids()
+        original_slug = self.form_data.pop("slug")
 
-        data = self.form_data.copy()
-        data.pop("slug")
-        response = self.author_client.post(NOTES_ADD_URL, data=data)
-
+        response = self.author_client.post(NOTES_ADD_URL, data=self.form_data)
         self.assertRedirects(
             response,
             NOTES_SUCCESS_URL,
             fetch_redirect_response=False,
         )
 
-        notes = Note.objects.exclude(pk=self.note.pk)
-        self.assertEqual(notes.count(), 1)
-        created = notes.get()
+        new_ids = notes_ids() - before_ids
+        self.assertEqual(len(new_ids), 1)
+        created = Note.objects.get(pk=new_ids.pop())
 
-        self.assertEqual(created.title, data["title"])
-        self.assertEqual(created.text, data["text"])
-        self.assertEqual(created.slug, slugify(data["title"]))
+        self.assertEqual(created.title, self.form_data["title"])
+        self.assertEqual(created.text, self.form_data["text"])
+        self.assertEqual(created.slug, slugify(self.form_data["title"]))
         self.assertEqual(created.author, self.author)
 
-        self.assertNotEqual(notes_state(), before)
+        self.form_data["slug"] = original_slug
 
     def test_author_can_edit_note(self):
         """Автор может редактировать свою заметку."""
-        data = self.form_data.copy()
-        data["title"] = "Updated title"
-        data["text"] = "Updated text"
-        data["slug"] = "updated-slug"
+        before_data = self.form_data.copy()
+        self.form_data.update(
+            {
+                "title": "Updated title",
+                "text": "Updated text",
+                "slug": "updated-slug",
+            }
+        )
 
-        response = self.author_client.post(NOTES_EDIT_URL, data=data)
+        response = self.author_client.post(NOTES_EDIT_URL, data=self.form_data)
         self.assertRedirects(
             response,
             NOTES_SUCCESS_URL,
@@ -117,19 +123,26 @@ class TestNoteLogic(BaseNoteTestCase):
         )
 
         updated = Note.objects.get(pk=self.note.pk)
-        self.assertEqual(updated.title, data["title"])
-        self.assertEqual(updated.text, data["text"])
-        self.assertEqual(updated.slug, data["slug"])
+        self.assertEqual(updated.title, self.form_data["title"])
+        self.assertEqual(updated.text, self.form_data["text"])
+        self.assertEqual(updated.slug, self.form_data["slug"])
         self.assertEqual(updated.author, self.note.author)
+
+        self.form_data.clear()
+        self.form_data.update(before_data)
 
     def test_reader_cant_edit_note(self):
         """Чужую заметку для другого пользователя не найти."""
-        data = self.form_data.copy()
-        data["title"] = "Updated title"
-        data["text"] = "Updated text"
-        data["slug"] = "updated-slug"
+        before_data = self.form_data.copy()
+        self.form_data.update(
+            {
+                "title": "Updated title",
+                "text": "Updated text",
+                "slug": "updated-slug",
+            }
+        )
 
-        response = self.reader_client.post(NOTES_EDIT_URL, data=data)
+        response = self.reader_client.post(NOTES_EDIT_URL, data=self.form_data)
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
 
         after = Note.objects.get(pk=self.note.pk)
@@ -137,6 +150,9 @@ class TestNoteLogic(BaseNoteTestCase):
         self.assertEqual(after.text, self.note.text)
         self.assertEqual(after.slug, self.note.slug)
         self.assertEqual(after.author, self.note.author)
+
+        self.form_data.clear()
+        self.form_data.update(before_data)
 
     def test_author_can_delete_note(self):
         """Автор может удалить свою заметку."""

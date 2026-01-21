@@ -6,6 +6,8 @@ from django.urls import reverse
 
 from notes.models import Note
 
+User = get_user_model()
+
 NOTE_SLUG = "note-slug"
 
 NOTES_HOME_URL = reverse("notes:home")
@@ -34,9 +36,8 @@ class BaseNoteTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Создаёт автора, читателя и одну заметку для проверок."""
-        user_model = get_user_model()
-        cls.author = user_model.objects.create(username="author")
-        cls.reader = user_model.objects.create(username="reader")
+        cls.author = User.objects.create(username="author")
+        cls.reader = User.objects.create(username="reader")
 
         cls.note = Note.objects.create(
             title="Заголовок",
