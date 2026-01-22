@@ -71,10 +71,8 @@ class TestNoteLogic(BaseNoteTestCase):
         """Нельзя создать две заметки с одинаковым slug."""
         before = notes_state()
 
-        response = self.author_client.post(
-            NOTES_ADD_URL,
-            data={**self.form_data, "slug": self.note.slug},
-        )
+        self.form_data["slug"] = self.note.slug
+        response = self.author_client.post(NOTES_ADD_URL, data=self.form_data)
 
         form = response.context.get("form")
         self.assertFormError(form, "slug", self.note.slug + WARNING)
@@ -84,13 +82,8 @@ class TestNoteLogic(BaseNoteTestCase):
         """Если slug пустой, он формируется автоматически из title."""
         before_ids = notes_ids()
 
-        response = self.author_client.post(
-            NOTES_ADD_URL,
-            data={
-                "title": self.form_data["title"],
-                "text": self.form_data["text"],
-            },
-        )
+        self.form_data["slug"] = ""
+        response = self.author_client.post(NOTES_ADD_URL, data=self.form_data)
         self.assertRedirects(
             response,
             NOTES_SUCCESS_URL,
